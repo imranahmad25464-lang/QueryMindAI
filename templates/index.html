@@ -1,0 +1,220 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QueryMind AI | Intelligent Data Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="/">
+                <div class="brand-icon">Q</div>
+                <div>
+                    <h2>QueryMind<span> AI</span></h2>
+                    <small>INTELLIGENT DATA</small>
+                </div>
+            </a>
+
+            <div class="nav-label">WORKSPACE</div>
+            <a class="nav-item active" href="/">
+                <span>▦</span> AI Query Studio
+            </a>
+            <div class="nav-item muted"><span>◷</span> Query History</div>
+
+            <div class="sidebar-bottom">
+                <div class="status-card">
+                    <span class="status-dot"></span>
+                    <div>
+                        <strong>Local AI Engine</strong>
+                        <small>Ollama integration</small>
+                    </div>
+                </div>
+                <div class="profile">
+                    <div class="avatar">QM</div>
+                    <div>
+                        <strong>QueryMind User</strong>
+                        <small>Personal workspace</small>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <span class="eyebrow">AI-POWERED ANALYTICS</span>
+                    <h1>Query Studio</h1>
+                </div>
+                <div class="topbar-right">
+                    <span class="local-badge"><span class="status-dot"></span> Local environment</span>
+                </div>
+            </header>
+
+            <section class="welcome">
+                <div class="welcome-copy">
+                    <div class="eyebrow">YOUR DATA, YOUR QUESTIONS</div>
+                    <h2>Think in questions.<br><span>Discover with data.</span></h2>
+                    <p>Ask questions in plain English. QueryMind AI translates them into SQL and retrieves answers from your database.</p>
+                </div>
+                <div class="hero-symbol">Q<span>✳</span></div>
+            </section>
+
+            <section class="query-card">
+                <div class="section-heading">
+                    <div>
+                        <span class="step-label">01 / ASK</span>
+                        <h3>What would you like to know?</h3>
+                    </div>
+                    <span class="ai-label">✦ AI ASSISTED</span>
+                </div>
+
+                <textarea id="question" maxlength="500"
+                    placeholder="e.g. Show all employees in the Engineering department..."
+                    rows="3"></textarea>
+
+                <div class="query-footer">
+                    <span class="helper-text">Use natural language — no SQL knowledge needed.</span>
+                    <button id="runButton" onclick="runQuery()">
+                        <span>✦</span> Run query <span>→</span>
+                    </button>
+                </div>
+
+                <div class="examples">
+                    <span>TRY AN EXAMPLE</span>
+                    <button onclick="useExample('Show all employees in Engineering')">Engineering employees</button>
+                    <button onclick="useExample('Who has the highest salary?')">Highest salary</button>
+                    <button onclick="useExample('Show total sales by product')">Sales by product</button>
+                </div>
+            </section>
+
+            <div id="message" class="message hidden"></div>
+
+            <section id="resultsSection" class="results-card hidden">
+                <div class="section-heading">
+                    <div>
+                        <span class="step-label">02 / RESULTS</span>
+                        <h3>Query results</h3>
+                    </div>
+                    <span id="rowCount" class="result-count">0 rows</span>
+                </div>
+
+                <div class="sql-panel">
+                    <div class="sql-heading"><span>GENERATED SQL</span><button onclick="copySQL()">Copy SQL</button></div>
+                    <pre id="sqlOutput"></pre>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <footer>
+                <span>QueryMind AI</span>
+                <span>Local-first · Read-only SQL · Built for data exploration</span>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        function useExample(question) {
+            document.getElementById("question").value = question;
+            document.getElementById("question").focus();
+        }
+
+        async function runQuery() {
+            const question = document.getElementById("question").value.trim();
+            const button = document.getElementById("runButton");
+            const message = document.getElementById("message");
+            const resultsSection = document.getElementById("resultsSection");
+
+            if (!question) {
+                showMessage("Please enter a question first.", true);
+                return;
+            }
+
+            button.disabled = true;
+            button.innerHTML = "✦ Thinking...";
+            message.classList.add("hidden");
+            resultsSection.classList.add("hidden");
+
+            try {
+                const response = await fetch("/api/query", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({question})
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Query failed.");
+                }
+
+                document.getElementById("sqlOutput").textContent = data.sql;
+                document.getElementById("rowCount").textContent =
+                    `${data.row_count} rows returned`;
+
+                const head = document.getElementById("tableHead");
+                const body = document.getElementById("tableBody");
+                head.replaceChildren();
+                body.replaceChildren();
+
+                const headerRow = document.createElement("tr");
+                data.columns.forEach(column => {
+                    const th = document.createElement("th");
+                    th.textContent = column;
+                    headerRow.appendChild(th);
+                });
+                head.appendChild(headerRow);
+
+                data.rows.forEach(row => {
+                    const tr = document.createElement("tr");
+                    data.columns.forEach(column => {
+                        const td = document.createElement("td");
+                        td.textContent = row[column] ?? "—";
+                        tr.appendChild(td);
+                    });
+                    body.appendChild(tr);
+                });
+
+                resultsSection.classList.remove("hidden");
+                showMessage("Query completed successfully.", false);
+            } catch (error) {
+                showMessage(error.message, true);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = "<span>✦</span> Run query <span>→</span>";
+            }
+        }
+
+        function showMessage(text, isError) {
+            const message = document.getElementById("message");
+            message.textContent = text;
+            message.className = "message " + (isError ? "error" : "success");
+        }
+
+        async function copySQL() {
+            const sql = document.getElementById("sqlOutput").textContent;
+            try {
+                await navigator.clipboard.writeText(sql);
+                showMessage("SQL copied to clipboard.", false);
+            } catch {
+                showMessage("Clipboard access failed. Select and copy the SQL manually.", true);
+            }
+        }
+
+        document.getElementById("question").addEventListener("keydown", event => {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                runQuery();
+            }
+        });
+    </script>
+</body>
+</html>
